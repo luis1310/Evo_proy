@@ -27,7 +27,7 @@ Este proyecto implementa un sistema de optimización de horarios académicos usa
 
 Instalar dependencias:
 ```bash
-pip install numpy pandas matplotlib
+pip install numpy pandas matplotlib openpyxl
 ```
 
 ## Estructura del Archivo Excel
