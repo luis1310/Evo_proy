@@ -24,8 +24,8 @@ class Node:
 
 # Nodos funcionales (internos)
 class IfTiempoMuerto(Node):
-    def __init__(self):
-        super().__init__("if_tiempo_muerto")
+    def __init__(self, tipo="if_tiempo_muerto"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         tiempos_muertos = calcular_tiempos_muertos(horario)
@@ -35,8 +35,8 @@ class IfTiempoMuerto(Node):
             return self.hijos[1].ejecutar(horario, cursos_seleccionados)
 
 class Secuencia(Node):
-    def __init__(self):
-        super().__init__("secuencia")
+    def __init__(self, tipo="secuencia"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         resultado = horario
@@ -45,8 +45,8 @@ class Secuencia(Node):
         return resultado
 
 class ProbarAlternativas(Node):
-    def __init__(self):
-        super().__init__("probar_alternativas")
+    def __init__(self, tipo="probar_alternativas"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         resultado1 = self.hijos[0].ejecutar(horario, cursos_seleccionados)
@@ -59,8 +59,8 @@ class ProbarAlternativas(Node):
 
 # Nodos terminales (hojas)
 class Compactar(Node):
-    def __init__(self):
-        super().__init__("compactar")
+    def __init__(self, tipo="compactar"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         nuevo_horario = [[None for _ in range(14)] for _ in range(5)]
@@ -75,8 +75,8 @@ class Compactar(Node):
         return nuevo_horario
 
 class MoverMañana(Node):
-    def __init__(self):
-        super().__init__("mover_mañana")
+    def __init__(self, tipo="mover_mañana"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         nuevo_horario = [[None for _ in range(14)] for _ in range(5)]
@@ -93,8 +93,8 @@ class MoverMañana(Node):
         return nuevo_horario
 
 class IntercambioAleatorio(Node):
-    def __init__(self):
-        super().__init__("intercambio_aleatorio")
+    def __init__(self, tipo="intercambio_aleatorio"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         nuevo_horario = copy.deepcopy(horario)
@@ -114,8 +114,8 @@ class IntercambioAleatorio(Node):
         return nuevo_horario
 
 class NoOp(Node):
-    def __init__(self):
-        super().__init__("no_op")
+    def __init__(self, tipo="no_op"):
+        super().__init__(tipo)
     
     def ejecutar(self, horario, cursos_seleccionados):
         return horario
@@ -146,8 +146,10 @@ class ProgramacionGeneticaOptimizador:
             nodo = random.choice(self.nodos_funcionales)()
             
             # Determinar número de hijos según el tipo
-            if isinstance(nodo, (IfTiempoMuerto, Secuencia, ProbarAlternativas)):
+            if isinstance(nodo, (IfTiempoMuerto, ProbarAlternativas)):
                 num_hijos = 2
+            elif isinstance(nodo, Secuencia):
+                num_hijos = random.randint(1, 3)  # Secuencia puede tener 1-3 hijos
             else:
                 num_hijos = 1
             
@@ -189,6 +191,8 @@ class ProgramacionGeneticaOptimizador:
     
     def seleccion_torneo(self, poblacion, fitness_scores, tam_torneo=3):
         """Selección por torneo"""
+        # Asegurarse de que tam_torneo no sea mayor que el número de individuos
+        tam_torneo = min(tam_torneo, len(poblacion))
         participantes = random.sample(list(zip(poblacion, fitness_scores)), tam_torneo)
         ganador = min(participantes, key=lambda x: x[1])
         return ganador[0].clonar()
@@ -204,8 +208,9 @@ class ProgramacionGeneticaOptimizador:
             
             if punto1 and punto2:
                 # Intercambiar subárboles
+                temp = punto1['nodo']
                 punto1['padre'].hijos[punto1['indice']] = punto2['nodo']
-                punto2['padre'].hijos[punto2['indice']] = punto1['nodo']
+                punto2['padre'].hijos[punto2['indice']] = temp
         
         return clon1
     
@@ -214,22 +219,29 @@ class ProgramacionGeneticaOptimizador:
         if random.random() < self.prob_mutacion:
             punto = self.obtener_nodo_aleatorio(individuo)
             if punto:
-                nuevo_subarbol = self.generar_arbol_aleatorio(profundidad=3)
+                nuevo_subarbol = self.generar_arbol_aleatorio(profundidad=2)  # Profundidad reducida para subárboles
                 punto['padre'].hijos[punto['indice']] = nuevo_subarbol
         
         return individuo
     
     def obtener_nodo_aleatorio(self, arbol, padre=None, indice=None):
         """Obtiene un nodo aleatorio del árbol para mutación o cruce"""
-        if random.random() < 0.1 or len(arbol.hijos) == 0:
+        # Si es un nodo hoja o decidimos aleatoriamente seleccionar este nodo
+        if len(arbol.hijos) == 0 or (padre is not None and random.random() < 0.1):
             if padre:
                 return {'nodo': arbol, 'padre': padre, 'indice': indice}
             return None
         
+        # De lo contrario, buscamos recursivamente en los hijos
         for i, hijo in enumerate(arbol.hijos):
             resultado = self.obtener_nodo_aleatorio(hijo, arbol, i)
             if resultado:
                 return resultado
+        
+        # Si llegamos aquí y este nodo tiene hijos pero no seleccionamos ninguno
+        # podemos seleccionar este nodo si tiene un padre
+        if padre:
+            return {'nodo': arbol, 'padre': padre, 'indice': indice}
         
         return None
     
@@ -256,13 +268,16 @@ class ProgramacionGeneticaOptimizador:
             nueva_poblacion = []
             
             # Elitismo: mantener el mejor individuo
-            nueva_poblacion.append(mejor_individuo.clonar())
+            if mejor_individuo:
+                nueva_poblacion.append(mejor_individuo.clonar())
             
             # Generar el resto de la población
             while len(nueva_poblacion) < self.tam_poblacion:
+                # Selección de padres
                 padre1 = self.seleccion_torneo(self.poblacion, fitness_scores)
                 padre2 = self.seleccion_torneo(self.poblacion, fitness_scores)
                 
+                # Cruce y mutación
                 hijo = self.cruce(padre1, padre2)
                 hijo = self.mutacion(hijo)
                 
@@ -270,7 +285,19 @@ class ProgramacionGeneticaOptimizador:
             
             self.poblacion = nueva_poblacion
         
+        # Si no se encontró un buen individuo, crear uno predeterminado
+        if not mejor_individuo or mejor_fitness == float('inf'):
+            mejor_individuo = self.crear_individuo_predeterminado()
+        
         return mejor_individuo
+    
+    def crear_individuo_predeterminado(self):
+        """Crea un individuo predeterminado para casos donde la evolución no encuentra buenas soluciones"""
+        # Estrategia simple: Secuencia(Compactar, MoverMañana)
+        raiz = Secuencia()
+        raiz.agregar_hijo(Compactar())
+        raiz.agregar_hijo(MoverMañana())
+        return raiz
 
 # Funciones auxiliares
 def calcular_tiempos_muertos(horario):
@@ -312,30 +339,35 @@ class SistemaOptimizacionHorarios:
     
     def cargar_carga_horaria(self, archivo):
         """Carga la carga horaria desde un archivo Excel"""
-        df = pd.read_excel(archivo, index_col=0)  # Primera columna es el índice (horas)
-        carga_horaria = []
-        
-        # Para cada día (columna)
-        for dia_col in df.columns:
-            dia_horario = []
-            for hora_idx in df.index[:14]:  # Máximo 14 bloques
-                celda = df.loc[hora_idx, dia_col]
-                if pd.notna(celda):
-                    partes = str(celda).split('|')
-                    if len(partes) >= 3:
-                        dia_horario.append({
-                            'id': int(partes[0]),
-                            'nombre': partes[1],
-                            'profesor': partes[2],
-                            'tipo': partes[3] if len(partes) > 3 else 'Teórico'
-                        })
+        try:
+            df = pd.read_excel(archivo, index_col=0)  # Primera columna es el índice (horas)
+            carga_horaria = []
+            
+            # Para cada día (columna)
+            for dia_col in df.columns:
+                dia_horario = []
+                for hora_idx in df.index[:14]:  # Máximo 14 bloques
+                    celda = df.loc[hora_idx, dia_col]
+                    if pd.notna(celda):
+                        partes = str(celda).split('|')
+                        if len(partes) >= 3:
+                            dia_horario.append({
+                                'id': int(partes[0]),
+                                'nombre': partes[1],
+                                'profesor': partes[2],
+                                'tipo': partes[3] if len(partes) > 3 else 'Teórico'
+                            })
+                        else:
+                            dia_horario.append(None)
                     else:
                         dia_horario.append(None)
-                else:
-                    dia_horario.append(None)
-            carga_horaria.append(dia_horario)
-        
-        return carga_horaria
+                carga_horaria.append(dia_horario)
+            
+            return carga_horaria
+        except Exception as e:
+            print(f"Error al cargar la carga horaria: {e}")
+            # Retornar una carga horaria vacía en caso de error
+            return [([None] * 14) for _ in range(5)]
     
     def obtener_cursos_disponibles(self):
         """Obtiene la lista de cursos únicos de la carga horaria"""
