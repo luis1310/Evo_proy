@@ -23,7 +23,7 @@ class LectorHorarios:
     
     def __init__(self):
         self.lector_pdf = LectorPDFHorarios()
-        self.lector_excel = LectorExcelUniversitario()
+        self.lector_excel = LectorExcelHorarios()
         self.ultimo_formato_detectado = None
     
     def leer_archivo(self, archivo: str) -> Dict:
@@ -469,7 +469,7 @@ class LectorPDFHorarios:
 # LECTOR EXCEL UNIVERSITARIO (Integrado)
 # ============================================================================
 
-class LectorExcelUniversitario:
+class LectorExcelHorarios:
     """
     Lector especializado para archivos Excel con horarios universitarios
     en el formato específico de la universidad.
