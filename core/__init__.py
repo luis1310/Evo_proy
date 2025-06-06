@@ -1,4 +1,4 @@
 from .validador_conflictos import ValidadorConflictos
 from .optimizador_genetico import ProgramacionGeneticaOptimizadorMejorado
 from .nodos_geneticos import IntercambioInteligente, ResolverConflictos
-from .lector_pdf_horarios import LectorPDFHorarios
+from .lector_horarios import LectorPDFHorarios, LectorExcelHorarios
