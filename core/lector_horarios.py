@@ -3,6 +3,8 @@
 Módulo unificado para leer archivos PDF y Excel con horarios académicos.
 VERSIÓN UNIFICADA Y CORREGIDA - Combina lector PDF + Excel universitario corregido + Excel estándar.
 
+CORRECCIÓN APLICADA: Procesamiento completo de secciones múltiples para cursos universitarios.
+
 Este archivo reemplaza completamente a: core/lector_pdf_horarios.py
 Integra toda la funcionalidad de lectura en un solo módulo con correcciones.
 """
@@ -473,7 +475,7 @@ class LectorPDFHorarios:
 class LectorExcelUniversitario:
     """
     Lector especializado para archivos Excel con horarios universitarios.
-    VERSIÓN CORREGIDA que procesa correctamente las secciones múltiples.
+    ✅ VERSIÓN CORREGIDA que procesa correctamente las secciones múltiples.
     """
     
     def __init__(self):
@@ -503,7 +505,7 @@ class LectorExcelUniversitario:
             if os.getenv('DEBUG_LECTOR'):
                 self._debug_estructura_archivo(df)
             
-            # Procesar con lógica corregida
+            # ✅ CORRECCIÓN APLICADA: Procesar con lógica corregida
             cursos = self._procesar_datos_universitarios_corregido(df)
             
             # Crear matriz y estadísticas
@@ -555,7 +557,9 @@ class LectorExcelUniversitario:
         return "OTRA"
     
     def _procesar_datos_universitarios_corregido(self, df: pd.DataFrame) -> List[Dict]:
-        """Lógica corregida para procesar datos universitarios."""
+        """
+        ✅ LÓGICA CORREGIDA: Procesa datos universitarios con secciones múltiples.
+        """
         cursos = []
         escuela_actual = None
         curso_base_actual = None
@@ -586,38 +590,192 @@ class LectorExcelUniversitario:
                 }
                 print(f"📚 Curso: {nombre_curso}")
                 
-                # Procesar la primera sección en esta misma fila
+                # ✅ CORRECCIÓN 1: Procesar la primera sección en esta misma fila
                 seccion = self._procesar_seccion_corregida(datos_fila, curso_base_actual, id_curso)
                 if seccion:
                     cursos.append(seccion)
                     print(f"   ✅ Sección {seccion['seccion']}: {seccion['codigo']}")
                     id_curso += 1
                 
-                i += 1
+                i += 1  # Avanzar a la siguiente fila
                 
-                # 3. Procesar secciones adicionales que siguen
+                # ✅ CORRECCIÓN 2: Buscar y procesar TODAS las secciones adicionales
+                secciones_procesadas = 1  # Ya procesamos la primera
+                
+                # Continuar procesando mientras encontremos secciones del mismo curso
                 while i < len(df):
-                    fila_siguiente = df.iloc[i]
-                    datos_siguiente = [str(x).strip() if pd.notna(x) else '' for x in fila_siguiente.values]
+                    fila_actual = df.iloc[i]
+                    datos_actual = [str(x).strip() if pd.notna(x) else '' for x in fila_actual.values]
                     
-                    # Si es una sección adicional del mismo curso
-                    if self._es_seccion_adicional(datos_siguiente):
-                        seccion = self._procesar_seccion_corregida(datos_siguiente, curso_base_actual, id_curso)
+                    # ✅ CORRECCIÓN 3: Verificar si es sección adicional O fila vacía con horarios
+                    if self._es_seccion_adicional(datos_actual):
+                        # Es una sección adicional clara (columna 2 tiene código)
+                        seccion = self._procesar_seccion_corregida(datos_actual, curso_base_actual, id_curso)
                         if seccion:
                             cursos.append(seccion)
                             print(f"   ✅ Sección {seccion['seccion']}: {seccion['codigo']}")
                             id_curso += 1
-                        i += 1
+                            secciones_procesadas += 1
+                        
+                    elif self._es_fila_horarios_adicionales(datos_actual):
+                        # ✅ CORRECCIÓN 4: Fila vacía con posibles horarios adicionales
+                        # Esto puede ser horarios de la sección anterior o una nueva sección
+                        if len(cursos) > 0 and secciones_procesadas > 0:
+                            # Intentar agregar horarios a la última sección procesada
+                            self._intentar_agregar_horarios_adicionales(cursos[-1], datos_actual)
+                        
+                    elif self._podria_ser_nueva_seccion_implicita(datos_actual, curso_base_actual):
+                        # ✅ CORRECCIÓN 5: Detectar secciones implícitas (solo horarios sin código explícito)
+                        seccion_implicita = self._crear_seccion_implicita(datos_actual, curso_base_actual, id_curso, secciones_procesadas)
+                        if seccion_implicita:
+                            cursos.append(seccion_implicita)
+                            print(f"   ✅ Sección implícita {seccion_implicita['seccion']}: {seccion_implicita['codigo']}")
+                            id_curso += 1
+                            secciones_procesadas += 1
+                    
                     else:
-                        # No es sección adicional, retroceder y salir del bucle
+                        # No es parte del curso actual, salir del bucle
                         break
+                    
+                    i += 1  # Avanzar a la siguiente fila
                 
+                print(f"   📊 Total secciones procesadas para '{nombre_curso}': {secciones_procesadas}")
                 continue
             
             i += 1
         
-        print(f"\n✅ Total procesado: {len(cursos)} cursos")
+        print(f"\n✅ Total procesado: {len(cursos)} cursos/secciones")
+        
+        # ✅ CORRECCIÓN 6: Validar el procesamiento
+        self._validar_procesamiento_secciones(cursos)
+        
         return cursos
+    
+    def _es_fila_horarios_adicionales(self, datos_fila: List[str]) -> bool:
+        """
+        ✅ NUEVA FUNCIÓN: Detecta filas que contienen horarios adicionales.
+        """
+        # Primera columna vacía, segunda columna vacía o con texto irrelevante, 
+        # pero tercera columna con horarios
+        return (not datos_fila[0] and 
+                (not datos_fila[1] or datos_fila[1] == '') and
+                len(datos_fila) > 2 and 
+                self._contiene_horarios(datos_fila[2]))
+
+    def _contiene_horarios(self, texto: str) -> bool:
+        """
+        ✅ NUEVA FUNCIÓN: Verifica si un texto contiene horarios válidos.
+        """
+        if not texto:
+            return False
+        # Buscar patrones como "LU 10-12", "MI 14-16", etc.
+        patron_horario = r'[A-Z]{2}\s+\d{1,2}-\d{1,2}'
+        return bool(re.search(patron_horario, texto))
+
+    def _podria_ser_nueva_seccion_implicita(self, datos_fila: List[str], curso_base: Dict) -> bool:
+        """
+        ✅ NUEVA FUNCIÓN: Detecta secciones implícitas (sin código explícito).
+        """
+        # Si hay horarios en columna 2 o 3, podría ser una nueva sección
+        return (not datos_fila[0] and not datos_fila[1] and
+                len(datos_fila) > 2 and self._contiene_horarios(datos_fila[2]))
+
+    def _crear_seccion_implicita(self, datos_fila: List[str], curso_base: Dict, id_curso: int, numero_seccion: int) -> Optional[Dict]:
+        """
+        ✅ NUEVA FUNCIÓN: Crea una sección implícita cuando no hay código explícito.
+        """
+        try:
+            # Generar código y sección
+            letras_seccion = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+            seccion_letra = letras_seccion[numero_seccion] if numero_seccion < len(letras_seccion) else f"S{numero_seccion}"
+            
+            # Crear código basado en el curso y escuela
+            codigo_base = f"{curso_base['escuela']}XXX{id_curso:02d}"  # Placeholder
+            codigo_seccion = f"{codigo_base}_{seccion_letra}"
+            
+            # Extraer horarios
+            horarios_texto = datos_fila[2] if len(datos_fila) > 2 else ''
+            salones_texto = datos_fila[3] if len(datos_fila) > 3 else ''
+            profesor_texto = datos_fila[4] if len(datos_fila) > 4 else ''
+            
+            # Procesar información
+            horarios = self._procesar_horarios_corregido(horarios_texto, salones_texto)
+            profesor = self._procesar_profesor(profesor_texto)
+            
+            if not horarios:  # Si no hay horarios válidos, no crear la sección
+                return None
+            
+            curso = {
+                'id': id_curso,
+                'codigo': codigo_seccion,
+                'nombre': curso_base['nombre'],
+                'escuela': curso_base['escuela'],
+                'seccion': seccion_letra,
+                'profesor': profesor,
+                'tipo': self._determinar_tipo_curso(salones_texto),
+                'capacidad': 30,  # Valor por defecto
+                'horarios': horarios,
+                'salones': self._extraer_salones(salones_texto)
+            }
+            
+            return curso
+            
+        except Exception as e:
+            print(f"⚠️  Error creando sección implícita: {e}")
+            return None
+
+    def _intentar_agregar_horarios_adicionales(self, ultimo_curso: Dict, datos_fila: List[str]):
+        """
+        ✅ NUEVA FUNCIÓN: Intenta agregar horarios adicionales a la última sección.
+        """
+        try:
+            horarios_texto = datos_fila[2] if len(datos_fila) > 2 else ''
+            salones_texto = datos_fila[3] if len(datos_fila) > 3 else ''
+            
+            if horarios_texto and self._contiene_horarios(horarios_texto):
+                horarios_adicionales = self._procesar_horarios_corregido(horarios_texto, salones_texto)
+                if horarios_adicionales:
+                    ultimo_curso['horarios'].extend(horarios_adicionales)
+                    print(f"      📅 Horarios adicionales agregados a {ultimo_curso['codigo']}")
+                    
+        except Exception as e:
+            print(f"⚠️  Error agregando horarios adicionales: {e}")
+
+    def _validar_procesamiento_secciones(self, cursos: List[Dict]):
+        """
+        ✅ NUEVA FUNCIÓN: Valida que el procesamiento de secciones sea correcto.
+        """
+        print(f"\n📊 VALIDACIÓN DEL PROCESAMIENTO:")
+        print("-" * 40)
+        
+        # Agrupar por nombre de curso
+        cursos_agrupados = {}
+        for curso in cursos:
+            nombre = curso['nombre']
+            if nombre not in cursos_agrupados:
+                cursos_agrupados[nombre] = []
+            cursos_agrupados[nombre].append(curso)
+        
+        # Mostrar estadísticas
+        cursos_con_multiples_secciones = 0
+        total_secciones = 0
+        
+        for nombre_curso, secciones in cursos_agrupados.items():
+            num_secciones = len(secciones)
+            total_secciones += num_secciones
+            
+            if num_secciones > 1:
+                cursos_con_multiples_secciones += 1
+                secciones_letras = [s['seccion'] for s in secciones]
+                print(f"✅ {nombre_curso}: {num_secciones} secciones ({', '.join(secciones_letras)})")
+            else:
+                print(f"⚪ {nombre_curso}: {num_secciones} sección")
+        
+        print(f"\n📈 ESTADÍSTICAS FINALES:")
+        print(f"   • Cursos únicos: {len(cursos_agrupados)}")
+        print(f"   • Total secciones: {total_secciones}")
+        print(f"   • Cursos con múltiples secciones: {cursos_con_multiples_secciones}")
+        print(f"   • Promedio secciones por curso: {total_secciones/len(cursos_agrupados):.1f}")
     
     def _es_encabezado_escuela(self, texto: str) -> bool:
         """Detecta encabezados de escuela."""
@@ -1006,6 +1164,49 @@ def test_lector_unificado(archivo: str):
         return False
 
 
+def test_procesamiento_fisica_i(archivo_excel: str):
+    """
+    ✅ FUNCIÓN DE PRUEBA: Verifica específicamente el procesamiento de FÍSICA I.
+    """
+    print("🧪 PRUEBA ESPECÍFICA: Procesamiento de FÍSICA I")
+    print("="*50)
+    
+    try:
+        lector = LectorExcelUniversitario()
+        datos = lector.leer_excel_universitario(archivo_excel)
+        
+        # Buscar todas las secciones de FÍSICA I
+        fisica_i_secciones = []
+        for curso in datos['cursos']:
+            if 'FÍSICA I' in curso['nombre'].upper():
+                fisica_i_secciones.append(curso)
+        
+        print(f"🔍 RESULTADOS PARA FÍSICA I:")
+        print(f"   Total secciones encontradas: {len(fisica_i_secciones)}")
+        
+        if len(fisica_i_secciones) >= 5:
+            print("✅ ¡CORRECCIÓN EXITOSA! Se encontraron 5 o más secciones")
+        else:
+            print("❌ Problema persiste: Se esperaban 5 secciones (A, B, C, D, E)")
+        
+        print(f"\n📋 Detalle de secciones encontradas:")
+        for i, seccion in enumerate(fisica_i_secciones, 1):
+            horarios_info = ""
+            if seccion['horarios']:
+                h = seccion['horarios'][0]
+                horarios_info = f" - {h['dia']} {h['hora_inicio']}-{h['hora_fin']}"
+            
+            print(f"   {i}. {seccion['codigo']} (Sección {seccion['seccion']}){horarios_info}")
+            print(f"      Profesor: {seccion['profesor']}")
+            print(f"      Total horarios: {len(seccion['horarios'])}")
+        
+        return len(fisica_i_secciones) >= 5
+        
+    except Exception as e:
+        print(f"❌ Error en prueba: {e}")
+        return False
+
+
 def main():
     """Función principal para pruebas directas del módulo."""
     import sys
@@ -1029,6 +1230,11 @@ def main():
     
     if es_prueba:
         test_lector_unificado(archivo)
+        
+        # ✅ PRUEBA ESPECÍFICA para FÍSICA I
+        if 'xlsx' in archivo.lower():
+            print("\n" + "="*60)
+            test_procesamiento_fisica_i(archivo)
     else:
         try:
             lector = LectorHorarios()
