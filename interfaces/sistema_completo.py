@@ -20,7 +20,7 @@ import re
 from typing import Dict, List, Optional
 
 # Imports de módulos del proyecto (estructura modular)
-from core.lector_horarios import LectorPDFHorarios
+from core.lector_horarios import LectorHorarios, LectorPDFHorarios
 from core.optimizador_genetico import ProgramacionGeneticaOptimizadorMejorado
 from core.validador_conflictos import ValidadorConflictos
 from generadores.generador_avanzado import GeneradorCargaHorariaAvanzado

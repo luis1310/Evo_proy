@@ -26,17 +26,17 @@ python scripts/optimizar.py
 
 ## 🖥️ Uso del Sistema
 
-### Procesar archivo PDF
+### Procesar archivo PDF (En proceso)
 ```bash
 python scripts/optimizar.py datos/Horarios_2023_1.pdf
 ```
 
-### Procesar archivo Excel
+### Procesar archivo Excel (Completo)
 ```bash
 python scripts/optimizar.py datos/carga_horaria.xlsx
 ```
 
-### Generar datos de prueba
+### Generar datos de prueba (Completo)
 ```bash
 python scripts/optimizar.py
 ```
