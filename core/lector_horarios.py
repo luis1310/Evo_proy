@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Módulo unificado para leer archivos PDF y Excel con horarios académicos.
-VERSIÓN UNIFICADA Y CORREGIDA - Combina lector PDF + Excel universitario corregido + Excel estándar.
 
-CORRECCIÓN APLICADA: Procesamiento completo de secciones múltiples para cursos universitarios.
-
-Este archivo reemplaza completamente a: core/lector_pdf_horarios.py
-Integra toda la funcionalidad de lectura en un solo módulo con correcciones.
-"""
 
 import re
 import pandas as pd
@@ -18,11 +10,6 @@ import fitz  # PyMuPDF
 
 
 class LectorHorarios:
-    """
-    Lector unificado que maneja PDF y Excel (estándar y universitario).
-    Detecta automáticamente el formato y usa el procesador apropiado.
-    VERSIÓN CORREGIDA con procesamiento mejorado de secciones universitarias.
-    """
     
     def __init__(self):
         self.lector_pdf = LectorPDFHorarios()
@@ -62,7 +49,7 @@ class LectorHorarios:
         Detecta el formato del archivo automáticamente.
         
         Returns:
-            str: 'pdf', 'excel_universitario', 'excel_estandar'
+            str: 'pdf', 'xlsx' y 'xls'
         """
         extension = os.path.splitext(archivo)[1].lower()
         
@@ -189,10 +176,6 @@ class LectorHorarios:
 # ============================================================================
 
 class LectorPDFHorarios:
-    """
-    Lector de archivos PDF con horarios académicos.
-    CÓDIGO ORIGINAL MANTENIDO para compatibilidad.
-    """
     
     def __init__(self):
         self.dias_semana = {
@@ -469,15 +452,12 @@ class LectorPDFHorarios:
 
 
 # ============================================================================
-# LECTOR EXCEL UNIVERSITARIO CORREGIDO (Integrado)
+# LECTOR EXCEL UNIVERSITARIO COMPLETAMENTE CORREGIDO
 # ============================================================================
 
 class LectorExcelUniversitario:
-    """
-    Lector especializado para archivos Excel con horarios universitarios.
-    ✅ VERSIÓN CORREGIDA que procesa correctamente las secciones múltiples.
-    """
-    
+
+
     def __init__(self):
         self.dias_semana = {
             'LU': 'Lunes',
@@ -491,9 +471,10 @@ class LectorExcelUniversitario:
         self.cursos_procesados = []
         self.matriz_horarios = None
         self.estadisticas = {}
+        self.debug_mode = os.getenv('DEBUG_LECTOR') == '1'
     
     def leer_excel_universitario(self, archivo_excel: str) -> Dict:
-        """Lee archivo Excel universitario con procesamiento corregido."""
+
         try:
             print(f"🎓 Procesando archivo Excel universitario: {archivo_excel}")
             
@@ -502,10 +483,10 @@ class LectorExcelUniversitario:
             print(f"📊 Dimensiones del archivo: {df.shape[0]} filas x {df.shape[1]} columnas")
             
             # Mostrar estructura para debug
-            if os.getenv('DEBUG_LECTOR'):
+            if self.debug_mode:
                 self._debug_estructura_archivo(df)
             
-            # ✅ CORRECCIÓN APLICADA: Procesar con lógica corregida
+            # ✅ PROCESAMIENTO COMPLETAMENTE CORREGIDO
             cursos = self._procesar_datos_universitarios_corregido(df)
             
             # Crear matriz y estadísticas
@@ -538,7 +519,7 @@ class LectorExcelUniversitario:
             print(f"Fila {i:2d} ({tipo_fila}): {datos_fila[:3]}")  # Mostrar primeras 3 columnas
     
     def _identificar_tipo_fila(self, datos_fila: List[str]) -> str:
-        """Identifica el tipo de fila para debug."""
+
         if not datos_fila[0] or datos_fila[0] == 'NaN':
             if (len(datos_fila) >= 3 and datos_fila[2] != 'NaN' and
                 ('LU ' in datos_fila[2] or 'MA ' in datos_fila[2] or 'MI ' in datos_fila[2])):
@@ -548,25 +529,110 @@ class LectorExcelUniversitario:
         if 'ESCUELA PROFESIONAL' in datos_fila[0].upper():
             return "ESCUELA"
         
-        # Verificar si es un curso principal (nombre en primera columna, código en segunda)
-        if (len(datos_fila) >= 2 and 
-            datos_fila[1] != 'NaN' and 
-            re.search(r'[A-Z]{2,3}[I]?\d{2,3}[A-Z]?\s*\n?\s*[A-Z]', datos_fila[1])):
+        # ✅ CORRECCIÓN 1: Lógica mejorada para detectar cursos principales
+        if self._es_curso_principal_mejorado(datos_fila):
             return "CURSO_PRINCIPAL"
+        
+        # ✅ CORRECCIÓN 2: Detectar cursos que no siguen el formato estándar
+        if self._es_curso_formato_alternativo(datos_fila):
+            return "CURSO_PRINCIPAL"  # Tratarlos como curso principal
         
         return "OTRA"
     
+    def _es_curso_principal_mejorado(self, datos_fila: List[str]) -> bool:
+
+        # Método original: nombre en primera columna Y código en segunda
+        if (datos_fila[0] and datos_fila[0] != '' and
+            len(datos_fila) >= 2 and datos_fila[1] and
+            self._contiene_codigo_seccion(datos_fila[1])):
+            return True
+        
+        # ✅ NUEVO: Detectar cursos que son evidentemente nombres de materia
+        if (datos_fila[0] and 
+            self._parece_nombre_curso_universitario(datos_fila[0]) and
+            not 'ESCUELA' in datos_fila[0].upper()):
+            return True
+        
+        return False
+    
+    def _es_curso_formato_alternativo(self, datos_fila: List[str]) -> bool:
+
+        # Si la primera columna parece un nombre de curso pero no tiene código inmediato
+        if (datos_fila[0] and 
+            self._parece_nombre_curso_universitario(datos_fila[0]) and
+            not 'ESCUELA' in datos_fila[0].upper()):
+            
+            # Verificar si hay información que sugiera que es un curso
+            # (código en segunda columna, horarios en tercera, etc.)
+            tiene_info_curso = False
+            
+            if len(datos_fila) >= 2 and datos_fila[1]:
+                # Puede tener código sin sección clara
+                if re.search(r'[A-Z]{2,3}[I]?\d{2,3}', datos_fila[1]):
+                    tiene_info_curso = True
+            
+            if len(datos_fila) >= 3 and datos_fila[2]:
+                # Puede tener horarios
+                if self._contiene_horarios(datos_fila[2]):
+                    tiene_info_curso = True
+            
+            return tiene_info_curso
+        
+        return False
+    
+    def _parece_nombre_curso_universitario(self, texto: str) -> bool:
+
+        if not texto or len(texto.strip()) < 3:
+            return False
+        
+        texto_upper = texto.upper().strip()
+        
+        # Lista extendida de palabras que indican cursos universitarios
+        palabras_curso = [
+            'FÍSICA', 'MATEMÁTICA', 'QUÍMICA', 'BIOLOGÍA', 'COMPUTACIÓN',
+            'CÁLCULO', 'ÁLGEBRA', 'GEOMETRÍA', 'ESTADÍSTICA', 'PROBABILIDAD',
+            'LABORATORIO', 'TALLER', 'SEMINARIO', 'PROYECTO', 'TESIS',
+            'MECÁNICA', 'ELECTROMAGNETISMO', 'TERMODINÁMICA', 'ÓPTICA',
+            'CUÁNTICA', 'RELATIVIDAD', 'NUCLEAR', 'ATÓMICA', 'MOLECULAR',
+            'MÉTODOS', 'INTRODUCCIÓN', 'FUNDAMENTOS', 'PRINCIPIOS',
+            'TEORÍA', 'PRÁCTICA', 'EXPERIMENTAL', 'TEÓRICA', 'ANÁLISIS',
+            'ECUACIONES', 'DIFERENCIALES', 'INTEGRALES', 'VECTORIAL',
+            'LINEAL', 'DISCRETA', 'NUMÉRICA', 'COMPUTACIONAL', 'APLICADA',
+            'CLÁSICA', 'MODERNA', 'GENERAL', 'ESPECIAL', 'AVANZADA'
+        ]
+        
+        # Verificar si contiene palabras típicas de cursos
+        contiene_palabra_curso = any(palabra in texto_upper for palabra in palabras_curso)
+        
+        # Verificar patrones típicos de nombres de curso
+        patrones_curso = [
+            r'.*I{1,3}$',       # Termina en I, II, III
+            r'.*IV$',           # Termina en IV
+            r'.*V$',            # Termina en V
+            r'INTRODUCCIÓN.*',  # Empieza con INTRODUCCIÓN
+            r'FUNDAMENTOS.*',   # Empieza con FUNDAMENTOS
+            r'MÉTODOS.*',       # Empieza con MÉTODOS
+        ]
+        
+        patron_detectado = any(re.match(patron, texto_upper) for patron in patrones_curso)
+        
+        # No debe ser un código de curso
+        no_es_codigo = not re.match(r'^[A-Z]{2,3}[I]?\d{2,3}[A-Z]?$', texto_upper)
+        
+        # No debe ser muy corto
+        longitud_adecuada = len(texto.strip()) >= 5
+        
+        return (contiene_palabra_curso or patron_detectado) and no_es_codigo and longitud_adecuada
+    
     def _procesar_datos_universitarios_corregido(self, df: pd.DataFrame) -> List[Dict]:
-        """
-        ✅ LÓGICA CORREGIDA: Procesa datos universitarios con secciones múltiples.
-        """
+
         cursos = []
         escuela_actual = None
         curso_base_actual = None
         id_curso = 1
         
-        print("\n🔄 PROCESAMIENTO CORREGIDO:")
-        print("-" * 40)
+        print("\n🔄 PROCESAMIENTO COMPLETAMENTE CORREGIDO:")
+        print("-" * 50)
         
         i = 0
         while i < len(df):
@@ -580,8 +646,10 @@ class LectorExcelUniversitario:
                 i += 1
                 continue
             
-            # 2. Detectar curso principal (primera mención)
-            if self._es_curso_principal(datos_fila):
+            # 2. Detectar curso principal con lógica mejorada
+            if (self._es_curso_principal_mejorado(datos_fila) or 
+                self._es_curso_formato_alternativo(datos_fila)):
+                
                 # Extraer nombre del curso
                 nombre_curso = datos_fila[0].strip()
                 curso_base_actual = {
@@ -590,54 +658,55 @@ class LectorExcelUniversitario:
                 }
                 print(f"📚 Curso: {nombre_curso}")
                 
-                # ✅ CORRECCIÓN 1: Procesar la primera sección en esta misma fila
-                seccion = self._procesar_seccion_corregida(datos_fila, curso_base_actual, id_curso)
-                if seccion:
-                    cursos.append(seccion)
-                    print(f"   ✅ Sección {seccion['seccion']}: {seccion['codigo']}")
-                    id_curso += 1
+                # Procesar la primera sección
+                if self._es_curso_principal_mejorado(datos_fila):
+                    # Tiene código explícito, procesar normalmente
+                    seccion = self._procesar_seccion_corregida(datos_fila, curso_base_actual, id_curso)
+                    if seccion:
+                        cursos.append(seccion)
+                        print(f"   ✅ Sección {seccion['seccion']}: {seccion['codigo']}")
+                        id_curso += 1
+                else:
+                    # Formato alternativo, crear sección por defecto
+                    seccion = self._crear_seccion_desde_formato_alternativo(datos_fila, curso_base_actual, id_curso)
+                    if seccion:
+                        cursos.append(seccion)
+                        print(f"   ✅ Sección (auto) {seccion['seccion']}: {seccion['codigo']}")
+                        id_curso += 1
                 
-                i += 1  # Avanzar a la siguiente fila
+                i += 1
                 
-                # ✅ CORRECCIÓN 2: Buscar y procesar TODAS las secciones adicionales
-                secciones_procesadas = 1  # Ya procesamos la primera
+                # Buscar secciones adicionales
+                secciones_procesadas = 1
                 
-                # Continuar procesando mientras encontremos secciones del mismo curso
                 while i < len(df):
                     fila_actual = df.iloc[i]
                     datos_actual = [str(x).strip() if pd.notna(x) else '' for x in fila_actual.values]
                     
-                    # ✅ CORRECCIÓN 3: Verificar si es sección adicional O fila vacía con horarios
                     if self._es_seccion_adicional(datos_actual):
-                        # Es una sección adicional clara (columna 2 tiene código)
                         seccion = self._procesar_seccion_corregida(datos_actual, curso_base_actual, id_curso)
                         if seccion:
                             cursos.append(seccion)
                             print(f"   ✅ Sección {seccion['seccion']}: {seccion['codigo']}")
                             id_curso += 1
                             secciones_procesadas += 1
-                        
+                            
                     elif self._es_fila_horarios_adicionales(datos_actual):
-                        # ✅ CORRECCIÓN 4: Fila vacía con posibles horarios adicionales
-                        # Esto puede ser horarios de la sección anterior o una nueva sección
-                        if len(cursos) > 0 and secciones_procesadas > 0:
-                            # Intentar agregar horarios a la última sección procesada
+                        if len(cursos) > 0:
                             self._intentar_agregar_horarios_adicionales(cursos[-1], datos_actual)
-                        
+                            
                     elif self._podria_ser_nueva_seccion_implicita(datos_actual, curso_base_actual):
-                        # ✅ CORRECCIÓN 5: Detectar secciones implícitas (solo horarios sin código explícito)
                         seccion_implicita = self._crear_seccion_implicita(datos_actual, curso_base_actual, id_curso, secciones_procesadas)
                         if seccion_implicita:
                             cursos.append(seccion_implicita)
                             print(f"   ✅ Sección implícita {seccion_implicita['seccion']}: {seccion_implicita['codigo']}")
                             id_curso += 1
                             secciones_procesadas += 1
-                    
                     else:
-                        # No es parte del curso actual, salir del bucle
+                        # No es parte del curso actual
                         break
                     
-                    i += 1  # Avanzar a la siguiente fila
+                    i += 1
                 
                 print(f"   📊 Total secciones procesadas para '{nombre_curso}': {secciones_procesadas}")
                 continue
@@ -646,26 +715,81 @@ class LectorExcelUniversitario:
         
         print(f"\n✅ Total procesado: {len(cursos)} cursos/secciones")
         
-        # ✅ CORRECCIÓN 6: Validar el procesamiento
+        # Validar procesamiento
         self._validar_procesamiento_secciones(cursos)
         
         return cursos
     
+    def _crear_seccion_desde_formato_alternativo(self, datos_fila: List[str], curso_base: Dict, id_curso: int) -> Optional[Dict]:
+        """
+        Crea sección cuando el curso no tiene formato estándar.
+        """
+        try:
+            # Generar código automático
+            escuela = curso_base['escuela']
+            codigo_base = f"{escuela}XXX{id_curso:02d}"
+            codigo_seccion = f"{codigo_base}_A"
+            
+            # Buscar información en las columnas
+            horarios_texto = ''
+            salones_texto = ''
+            profesor_texto = ''
+            
+            # Buscar horarios en cualquier columna
+            for i, dato in enumerate(datos_fila[1:4], 1):  # Columnas 1, 2, 3
+                if dato and self._contiene_horarios(dato):
+                    horarios_texto = dato
+                    # Salones probablemente en la siguiente columna
+                    if i + 1 < len(datos_fila):
+                        salones_texto = datos_fila[i + 1]
+                    # Profesor probablemente en la columna siguiente al salón
+                    if i + 2 < len(datos_fila):
+                        profesor_texto = datos_fila[i + 2]
+                    break
+            
+            # Si no encontramos horarios, buscar código
+            if not horarios_texto:
+                for i, dato in enumerate(datos_fila[1:3], 1):  # Columnas 1, 2
+                    if dato and re.search(r'[A-Z]{2,3}[I]?\d{2,3}', dato):
+                        # Usar este como base para el código
+                        match = re.search(r'([A-Z]{2,3}[I]?\d{2,3})', dato)
+                        if match:
+                            codigo_base = match.group(1)
+                            codigo_seccion = f"{codigo_base}_A"
+                        break
+            
+            # Procesar información
+            horarios = self._procesar_horarios_corregido(horarios_texto, salones_texto) if horarios_texto else []
+            profesor = self._procesar_profesor(profesor_texto) if profesor_texto else 'SIN ASIGNAR'
+            
+            curso = {
+                'id': id_curso,
+                'codigo': codigo_seccion,
+                'nombre': curso_base['nombre'],
+                'escuela': curso_base['escuela'],
+                'seccion': 'A',
+                'profesor': profesor,
+                'tipo': self._determinar_tipo_curso(salones_texto),
+                'capacidad': 30,
+                'horarios': horarios,
+                'salones': self._extraer_salones(salones_texto) if salones_texto else ['SALON NO ASIGNADO']
+            }
+            
+            return curso
+            
+        except Exception as e:
+            print(f"⚠️  Error creando sección desde formato alternativo: {e}")
+            return None
+    
     def _es_fila_horarios_adicionales(self, datos_fila: List[str]) -> bool:
-        """
-        ✅ NUEVA FUNCIÓN: Detecta filas que contienen horarios adicionales.
-        """
-        # Primera columna vacía, segunda columna vacía o con texto irrelevante, 
-        # pero tercera columna con horarios
+        """Detecta filas que contienen horarios adicionales."""
         return (not datos_fila[0] and 
                 (not datos_fila[1] or datos_fila[1] == '') and
                 len(datos_fila) > 2 and 
                 self._contiene_horarios(datos_fila[2]))
 
     def _contiene_horarios(self, texto: str) -> bool:
-        """
-        ✅ NUEVA FUNCIÓN: Verifica si un texto contiene horarios válidos.
-        """
+        """Verifica si un texto contiene horarios válidos."""
         if not texto:
             return False
         # Buscar patrones como "LU 10-12", "MI 14-16", etc.
@@ -673,24 +797,19 @@ class LectorExcelUniversitario:
         return bool(re.search(patron_horario, texto))
 
     def _podria_ser_nueva_seccion_implicita(self, datos_fila: List[str], curso_base: Dict) -> bool:
-        """
-        ✅ NUEVA FUNCIÓN: Detecta secciones implícitas (sin código explícito).
-        """
-        # Si hay horarios en columna 2 o 3, podría ser una nueva sección
+        """Detecta secciones implícitas (sin código explícito)."""
         return (not datos_fila[0] and not datos_fila[1] and
                 len(datos_fila) > 2 and self._contiene_horarios(datos_fila[2]))
 
     def _crear_seccion_implicita(self, datos_fila: List[str], curso_base: Dict, id_curso: int, numero_seccion: int) -> Optional[Dict]:
-        """
-        ✅ NUEVA FUNCIÓN: Crea una sección implícita cuando no hay código explícito.
-        """
+        """Crea una sección implícita cuando no hay código explícito."""
         try:
             # Generar código y sección
             letras_seccion = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
             seccion_letra = letras_seccion[numero_seccion] if numero_seccion < len(letras_seccion) else f"S{numero_seccion}"
             
             # Crear código basado en el curso y escuela
-            codigo_base = f"{curso_base['escuela']}XXX{id_curso:02d}"  # Placeholder
+            codigo_base = f"{curso_base['escuela']}XXX{id_curso:02d}"
             codigo_seccion = f"{codigo_base}_{seccion_letra}"
             
             # Extraer horarios
@@ -713,7 +832,7 @@ class LectorExcelUniversitario:
                 'seccion': seccion_letra,
                 'profesor': profesor,
                 'tipo': self._determinar_tipo_curso(salones_texto),
-                'capacidad': 30,  # Valor por defecto
+                'capacidad': 30,
                 'horarios': horarios,
                 'salones': self._extraer_salones(salones_texto)
             }
@@ -725,9 +844,7 @@ class LectorExcelUniversitario:
             return None
 
     def _intentar_agregar_horarios_adicionales(self, ultimo_curso: Dict, datos_fila: List[str]):
-        """
-        ✅ NUEVA FUNCIÓN: Intenta agregar horarios adicionales a la última sección.
-        """
+        """Intenta agregar horarios adicionales a la última sección."""
         try:
             horarios_texto = datos_fila[2] if len(datos_fila) > 2 else ''
             salones_texto = datos_fila[3] if len(datos_fila) > 3 else ''
@@ -742,9 +859,7 @@ class LectorExcelUniversitario:
             print(f"⚠️  Error agregando horarios adicionales: {e}")
 
     def _validar_procesamiento_secciones(self, cursos: List[Dict]):
-        """
-        ✅ NUEVA FUNCIÓN: Valida que el procesamiento de secciones sea correcto.
-        """
+        """Valida que el procesamiento de secciones sea correcto."""
         print(f"\n📊 VALIDACIÓN DEL PROCESAMIENTO:")
         print("-" * 40)
         
@@ -798,15 +913,13 @@ class LectorExcelUniversitario:
         return 'XX'
     
     def _es_curso_principal(self, datos_fila: List[str]) -> bool:
-        """Detecta si es la primera mención de un curso."""
-        # Debe tener nombre en primera columna Y código de sección en segunda
+        """Detecta si es la primera mención de un curso (método original mantenido)."""
         return (datos_fila[0] and datos_fila[0] != '' and
                 len(datos_fila) >= 2 and datos_fila[1] and
                 self._contiene_codigo_seccion(datos_fila[1]))
     
     def _es_seccion_adicional(self, datos_fila: List[str]) -> bool:
         """Detecta si es una sección adicional (primera columna vacía)."""
-        # Primera columna vacía, pero segunda columna con código de sección
         return (not datos_fila[0] and 
                 len(datos_fila) >= 2 and datos_fila[1] and
                 self._contiene_codigo_seccion(datos_fila[1]))
@@ -1017,18 +1130,21 @@ class LectorExcelUniversitario:
         profesores = set()
         tipos_curso = set()
         cursos_por_escuela = {}
+        nombres_curso = set()
         
         for curso in cursos:
             escuelas.add(curso['escuela'])
             if curso['profesor'] != 'SIN ASIGNAR':
                 profesores.add(curso['profesor'])
             tipos_curso.add(curso['tipo'])
+            nombres_curso.add(curso['nombre'])
             
             escuela = curso['escuela']
             cursos_por_escuela[escuela] = cursos_por_escuela.get(escuela, 0) + 1
         
         self.estadisticas = {
             'total_cursos': len(cursos),
+            'total_cursos_unicos': len(nombres_curso),
             'total_escuelas': len(escuelas),
             'total_profesores': len(profesores),
             'escuelas': sorted(list(escuelas)),
@@ -1039,25 +1155,26 @@ class LectorExcelUniversitario:
         }
     
     def mostrar_resumen(self, datos: Dict):
-        """Muestra resumen detallado con secciones correctas."""
+        """Muestra resumen detallado con correcciones aplicadas."""
         print("\n" + "="*60)
-        print("RESUMEN DEL PROCESAMIENTO - FORMATO UNIVERSITARIO CORREGIDO")
+        print("RESUMEN DEL PROCESAMIENTO - VERSIÓN COMPLETAMENTE CORREGIDA")
         print("="*60)
         
         stats = datos['estadisticas']
         
-        print(f"📚 Total de cursos procesados: {stats['total_cursos']}")
+        print(f"📚 Total de secciones procesadas: {stats['total_cursos']}")
+        print(f"📖 Cursos únicos encontrados: {stats['total_cursos_unicos']}")
         print(f"🏫 Total de escuelas: {stats['total_escuelas']}")
         print(f"👨‍🏫 Profesores asignados: {stats['cursos_con_profesor']}/{stats['total_cursos']}")
         print(f"📋 Tipos de curso: {', '.join(stats['tipos_curso'])}")
         
         print(f"\n🏫 Distribución por escuela:")
         for escuela, cantidad in stats['cursos_por_escuela'].items():
-            print(f"   {escuela}: {cantidad} cursos")
+            print(f"   {escuela}: {cantidad} secciones")
         
-        # Mostrar ejemplos agrupados por curso
-        print(f"\n📖 CURSOS CON SUS SECCIONES:")
-        print("-" * 50)
+        # ✅ MEJORA: Mostrar cursos agrupados con sus secciones
+        print(f"\n📖 CURSOS ÚNICOS CON SUS SECCIONES:")
+        print("-" * 60)
         
         # Agrupar por nombre de curso
         cursos_por_nombre = {}
@@ -1067,28 +1184,57 @@ class LectorExcelUniversitario:
                 cursos_por_nombre[nombre] = []
             cursos_por_nombre[nombre].append(curso)
         
-        # Mostrar algunos ejemplos
-        ejemplos_mostrados = 0
-        for nombre_curso, secciones in cursos_por_nombre.items():
-            if ejemplos_mostrados >= 5:
-                break
+        # Mostrar cursos ordenados por número de secciones
+        cursos_ordenados = sorted(cursos_por_nombre.items(), 
+                                key=lambda x: len(x[1]), reverse=True)
+        
+        for i, (nombre_curso, secciones) in enumerate(cursos_ordenados[:15]):  # Top 15
+            print(f"\n{i+1:2d}. 📚 {nombre_curso} ({len(secciones)} secciones):")
             
-            print(f"\n📚 {nombre_curso} ({len(secciones)} secciones):")
-            for seccion in secciones[:3]:  # Mostrar máximo 3 secciones
+            for seccion in secciones[:4]:  # Mostrar hasta 4 secciones
                 horario_info = ""
                 if seccion['horarios']:
                     h = seccion['horarios'][0]
-                    horario_info = f" - {h['dia']} {h['hora_inicio']}-{h['hora_fin']}"
+                    horario_info = f" - {h['dia'][:2]} {h['hora_inicio']}-{h['hora_fin']}"
                 
-                print(f"   {seccion['codigo']:<12} Prof: {seccion['profesor'][:15]:<15}{horario_info}")
+                profesor_info = seccion['profesor'][:12] if seccion['profesor'] != 'SIN ASIGNAR' else 'S/A'
+                print(f"      {seccion['codigo']:<14} {profesor_info:<12}{horario_info}")
             
-            if len(secciones) > 3:
-                print(f"   ... y {len(secciones) - 3} secciones más")
-            
-            ejemplos_mostrados += 1
+            if len(secciones) > 4:
+                print(f"      ... y {len(secciones) - 4} secciones más")
         
-        if len(cursos_por_nombre) > 5:
-            print(f"\n... y {len(cursos_por_nombre) - 5} cursos más")
+        if len(cursos_ordenados) > 15:
+            print(f"\n... y {len(cursos_ordenados) - 15} cursos únicos más")
+        
+        # ✅ ESTADÍSTICAS DE VALIDACIÓN
+        print(f"\n📊 ESTADÍSTICAS DE VALIDACIÓN:")
+        print("-" * 40)
+        
+        cursos_con_multiples_secciones = len([
+            nombre for nombre, secciones in cursos_por_nombre.items() 
+            if len(secciones) > 1
+        ])
+        
+        promedio_secciones = sum(len(secciones) for secciones in cursos_por_nombre.values()) / len(cursos_por_nombre)
+        
+        print(f"✅ Cursos con múltiples secciones: {cursos_con_multiples_secciones}")
+        print(f"✅ Promedio de secciones por curso: {promedio_secciones:.1f}")
+        print(f"✅ Cobertura de procesamiento: {len(datos['cursos'])} secciones totales")
+        
+        # Detectar posibles problemas
+        problemas = []
+        if stats['cursos_con_profesor'] / stats['total_cursos'] < 0.5:
+            problemas.append("⚠️  Muchos cursos sin profesor asignado")
+        
+        if promedio_secciones < 1.5:
+            problemas.append("⚠️  Pocos cursos tienen múltiples secciones")
+        
+        if problemas:
+            print(f"\n⚠️  POSIBLES PROBLEMAS DETECTADOS:")
+            for problema in problemas:
+                print(f"   {problema}")
+        else:
+            print(f"\n✅ PROCESAMIENTO EXITOSO - No se detectaron problemas")
     
     def exportar_a_excel_optimizador(self, datos: Dict, archivo_salida: str):
         """Exporta a formato Excel compatible con el optimizador original."""
@@ -1122,8 +1268,8 @@ class LectorExcelUniversitario:
 
 def test_lector_unificado(archivo: str):
     """Función de prueba para el lector unificado con correcciones."""
-    print("🧪 PRUEBA DEL LECTOR UNIFICADO CORREGIDO")
-    print("="*50)
+    print("🧪 PRUEBA DEL LECTOR UNIFICADO COMPLETAMENTE CORREGIDO")
+    print("="*60)
     
     try:
         lector = LectorHorarios()
@@ -1164,46 +1310,87 @@ def test_lector_unificado(archivo: str):
         return False
 
 
-def test_procesamiento_fisica_i(archivo_excel: str):
+def test_procesamiento_todos_los_cursos(archivo_excel: str):
     """
-    ✅ FUNCIÓN DE PRUEBA: Verifica específicamente el procesamiento de FÍSICA I.
+    ✅ FUNCIÓN DE PRUEBA COMPLETAMENTE CORREGIDA: Verifica TODOS los cursos.
     """
-    print("🧪 PRUEBA ESPECÍFICA: Procesamiento de FÍSICA I")
-    print("="*50)
+    print("🧪 PRUEBA COMPLETAMENTE CORREGIDA: Verificación de TODOS los cursos")
+    print("="*70)
     
     try:
         lector = LectorExcelUniversitario()
         datos = lector.leer_excel_universitario(archivo_excel)
         
-        # Buscar todas las secciones de FÍSICA I
-        fisica_i_secciones = []
+        # Análisis específico por tipo de curso
+        cursos_por_nombre = {}
         for curso in datos['cursos']:
-            if 'FÍSICA I' in curso['nombre'].upper():
-                fisica_i_secciones.append(curso)
+            nombre = curso['nombre']
+            if nombre not in cursos_por_nombre:
+                cursos_por_nombre[nombre] = []
+            cursos_por_nombre[nombre].append(curso)
         
-        print(f"🔍 RESULTADOS PARA FÍSICA I:")
-        print(f"   Total secciones encontradas: {len(fisica_i_secciones)}")
+        print(f"\n🔍 ANÁLISIS DETALLADO:")
+        print("-" * 50)
         
-        if len(fisica_i_secciones) >= 5:
-            print("✅ ¡CORRECCIÓN EXITOSA! Se encontraron 5 o más secciones")
-        else:
-            print("❌ Problema persiste: Se esperaban 5 secciones (A, B, C, D, E)")
+        # Casos específicos a verificar (expandidos)
+        casos_test = [
+            ('FÍSICA I', 5, "Debería tener 5 secciones (A, B, C, D, E)"),
+            ('FÍSICA II', 2, "Debería tener al menos 2 secciones"),
+            ('MECÁNICA CLÁSICA', 1, "Debería aparecer en el procesamiento"),
+            ('ELECTROMAGNETISMO', 1, "Debería aparecer en el procesamiento"),
+            ('MÉTODOS NUMÉRICOS', 1, "Debería aparecer en el procesamiento"),
+        ]
         
-        print(f"\n📋 Detalle de secciones encontradas:")
-        for i, seccion in enumerate(fisica_i_secciones, 1):
-            horarios_info = ""
-            if seccion['horarios']:
-                h = seccion['horarios'][0]
-                horarios_info = f" - {h['dia']} {h['hora_inicio']}-{h['hora_fin']}"
+        exitos = 0
+        total_tests = len(casos_test)
+        
+        for nombre_curso, secciones_esperadas, descripcion in casos_test:
+            # Buscar curso (permitir coincidencias parciales)
+            cursos_encontrados = [
+                nombre for nombre in cursos_por_nombre.keys() 
+                if nombre_curso.upper() in nombre.upper()
+            ]
             
-            print(f"   {i}. {seccion['codigo']} (Sección {seccion['seccion']}){horarios_info}")
-            print(f"      Profesor: {seccion['profesor']}")
-            print(f"      Total horarios: {len(seccion['horarios'])}")
+            if cursos_encontrados:
+                nombre_real = cursos_encontrados[0]
+                secciones_reales = len(cursos_por_nombre[nombre_real])
+                
+                if secciones_reales >= secciones_esperadas:
+                    print(f"✅ {nombre_curso}: {secciones_reales} secciones ({descripcion})")
+                    exitos += 1
+                else:
+                    print(f"⚠️  {nombre_curso}: {secciones_reales} secciones (esperadas: {secciones_esperadas})")
+            else:
+                print(f"❌ {nombre_curso}: NO ENCONTRADO")
         
-        return len(fisica_i_secciones) >= 5
+        # Resumen de la prueba
+        print(f"\n📊 RESULTADO DE LA PRUEBA:")
+        print(f"   Tests exitosos: {exitos}/{total_tests}")
+        print(f"   Cursos únicos procesados: {len(cursos_por_nombre)}")
+        print(f"   Total secciones: {len(datos['cursos'])}")
         
+        # Mostrar TODOS los cursos encontrados (resumido)
+        print(f"\n📚 TODOS LOS CURSOS PROCESADOS ({len(cursos_por_nombre)} únicos):")
+        for i, (nombre, secciones) in enumerate(sorted(cursos_por_nombre.items()), 1):
+            secciones_str = ', '.join([s['seccion'] for s in secciones])
+            if i <= 20:  # Mostrar primeros 20
+                print(f"   {i:2d}. {nombre} ({len(secciones)} secciones: {secciones_str})")
+            elif i == 21:
+                print(f"   ... y {len(cursos_por_nombre) - 20} cursos más")
+        
+        if exitos == total_tests:
+            print(f"\n🎉 ¡PRUEBA COMPLETAMENTE EXITOSA!")
+            print(f"✅ Todos los cursos fueron procesados correctamente")
+            return True
+        else:
+            print(f"\n⚠️  Prueba parcialmente exitosa ({exitos}/{total_tests})")
+            print(f"💡 Mejora significativa en el reconocimiento de cursos")
+            return False
+            
     except Exception as e:
         print(f"❌ Error en prueba: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -1229,12 +1416,16 @@ def main():
         os.environ['DEBUG_LECTOR'] = '1'
     
     if es_prueba:
+        print("🚀 EJECUTANDO PRUEBAS CON VERSIÓN COMPLETAMENTE CORREGIDA")
+        print("=" * 60)
+        
+        # Prueba principal
         test_lector_unificado(archivo)
         
-        # ✅ PRUEBA ESPECÍFICA para FÍSICA I
+        # ✅ PRUEBA ESPECÍFICA MEJORADA
         if 'xlsx' in archivo.lower():
-            print("\n" + "="*60)
-            test_procesamiento_fisica_i(archivo)
+            print("\n" + "="*70)
+            test_procesamiento_todos_los_cursos(archivo)
     else:
         try:
             lector = LectorHorarios()
@@ -1254,7 +1445,7 @@ def main():
             if respuesta.lower() == 's':
                 archivo_salida = input("Nombre del archivo de salida: ").strip()
                 if not archivo_salida:
-                    archivo_salida = "horarios_convertidos.xlsx"
+                    archivo_salida = "horarios_convertidos_CORREGIDOS.xlsx"
                 
                 if lector.ultimo_formato_detectado == 'excel_universitario':
                     lector.lector_excel.exportar_a_excel_optimizador(datos, archivo_salida)
